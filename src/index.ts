@@ -20,6 +20,7 @@ const app = new Hono<{ Bindings: Bindings }>();
 // Define GraphQL Schema
 const schema = createSchema<GraphQLContext>({
   typeDefs: /* GraphQL */ `
+  
     type User {
       id: Int!
       name: String!
@@ -54,6 +55,13 @@ const schema = createSchema<GraphQLContext>({
       review(id: Int!): Review
     }
 
+    input EditGameInput {
+      name: String
+      description: String
+      price: Int
+      platform: [String!]
+    }
+
     type Mutation {
       addUser(name: String!, email: String!): User!
       addGame(name: String!, description: String!, price: Int!, platform: [String!]!): Game!
@@ -61,7 +69,9 @@ const schema = createSchema<GraphQLContext>({
       deleteUser(id: Int!): User!
       deleteGame(id: Int!): Game!
       deleteReview(id: Int!): Review!
+      updateGame(id: Int!, input: EditGameInput!): Game!
     }
+
 
   `,
   resolvers: {
@@ -139,6 +149,10 @@ const schema = createSchema<GraphQLContext>({
         const deletedReviews = await context.db.delete(review).where(eq(review.gameId, id)).returning();
         const deletedGame = await context.db.delete(game).where(eq(game.id, id)).returning();
         return deletedGame[0];
+      },
+      updateGame: async (_, { id, input }, context) => {
+        const result = await context.db.update(game).set(input).where(eq(game.id, id)).returning();
+        return result[0];
       },
 
 
