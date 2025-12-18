@@ -53,10 +53,14 @@ const schema = createSchema<GraphQLContext>({
       reviews: [Review!]!
       review(id: Int!): Review
     }
+
     type Mutation {
       addUser(name: String!, email: String!): User!
       addGame(name: String!, description: String!, price: Int!, platform: [String!]!): Game!
       addReview(rating: Int!, comment: String!, gameId: Int!, userId: Int!): Review!
+      deleteUser(id: Int!): User!
+      deleteGame(id: Int!): Game!
+      deleteReview(id: Int!): Review!
     }
 
   `,
@@ -121,6 +125,20 @@ const schema = createSchema<GraphQLContext>({
       addReview: async (_, { rating, comment, gameId, userId }, context) => {
         const result = await context.db.insert(review).values({ rating, comment, gameId, userId }).returning();
         return result[0];
+      },
+      deleteUser: async (_, { id }, context) => {
+        const deletedReviews = await context.db.delete(review).where(eq(review.userId, id)).returning();
+        const deletedUser = await context.db.delete(users).where(eq(users.id, id)).returning();
+        return deletedUser[0];
+      },
+      deleteReview: async (_, { id }, context) => {
+        const deletedReview = await context.db.delete(review).where(eq(review.id, id)).returning();
+        return deletedReview[0];
+      },
+      deleteGame: async (_, { id }, context) => {
+        const deletedReviews = await context.db.delete(review).where(eq(review.gameId, id)).returning();
+        const deletedGame = await context.db.delete(game).where(eq(game.id, id)).returning();
+        return deletedGame[0];
       },
 
 
