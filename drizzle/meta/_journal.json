@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1766017712744,
+      "tag": "0000_typical_chronomancer",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1766023493793,
+      "tag": "0001_tidy_bloodaxe",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1766025513765,
+      "tag": "0002_unique_thor_girl",
+      "breakpoints": true
+    }
+  ]
+}
