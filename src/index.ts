@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { createYoga, createSchema } from 'graphql-yoga';
 import { drizzle } from 'drizzle-orm/d1';
-import { users, game, review } from './db/schema';
 import { eq } from 'drizzle-orm';
-import { __Directive } from 'graphql';
+import { GraphQLError } from 'graphql';
+import { users, game, review } from './db/schema';
 
-// Define the bindings environment
+// --- Type Definitions ---
+
 type Bindings = {
   my_db_graphql: D1Database;
 };
@@ -14,167 +15,232 @@ type GraphQLContext = Bindings & {
   db: ReturnType<typeof drizzle>;
 };
 
-// Create the Hono app
+// --- Hono App Setup ---
+
 const app = new Hono<{ Bindings: Bindings }>();
 
-// Define GraphQL Schema
+// --- GraphQL Schema ---
+
+const typeDefs = /* GraphQL */ `
+  type User {
+    id: Int!
+    name: String!
+    email: String!
+    reviews: [Review!]!
+  }
+
+  type Game {
+    id: Int!
+    name: String!
+    description: String!
+    price: Int!
+    platform: [String!]!
+    reviews: [Review!]!
+  }
+
+  type Review {
+    id: Int!
+    rating: Int!
+    comment: String!
+    user: User!
+    game: Game!
+  }
+
+  type Query {
+    users: [User!]!
+    user(id: Int!): User
+    games: [Game!]!
+    game(id: Int!): Game
+    reviews: [Review!]!
+    review(id: Int!): Review
+  }
+
+  input EditGameInput {
+    name: String
+    description: String
+    price: Int
+    platform: [String!]
+  }
+
+  type Mutation {
+    addUser(name: String!, email: String!): User!
+    addGame(name: String!, description: String!, price: Int!, platform: [String!]!): Game!
+    addReview(rating: Int!, comment: String!, gameId: Int!, userId: Int!): Review!
+    deleteUser(id: Int!): User!
+    deleteGame(id: Int!): Game!
+    deleteReview(id: Int!): Review!
+    updateGame(id: Int!, input: EditGameInput!): Game!
+  }
+`;
+
 const schema = createSchema<GraphQLContext>({
-  typeDefs: /* GraphQL */ `
-  
-    type User {
-      id: Int!
-      name: String!
-      email: String!
-      reviews: [Review!]!
-    }
-
-    type Game {
-      id: Int!
-      name: String!
-      description: String!
-      price: Int!
-      platform: [String!]!
-      reviews: [Review!]!
-    }
-
-    type Review {
-      id: Int!
-      rating: Int!
-      comment: String!
-      user: User!
-      game: Game!
-    }
-
-
-    type Query {
-      users: [User!]!
-      user(id: Int!): User
-      games: [Game!]!
-      game(id: Int!): Game
-      reviews: [Review!]!
-      review(id: Int!): Review
-    }
-
-    input EditGameInput {
-      name: String
-      description: String
-      price: Int
-      platform: [String!]
-    }
-
-    type Mutation {
-      addUser(name: String!, email: String!): User!
-      addGame(name: String!, description: String!, price: Int!, platform: [String!]!): Game!
-      addReview(rating: Int!, comment: String!, gameId: Int!, userId: Int!): Review!
-      deleteUser(id: Int!): User!
-      deleteGame(id: Int!): Game!
-      deleteReview(id: Int!): Review!
-      updateGame(id: Int!, input: EditGameInput!): Game!
-    }
-
-
-  `,
+  typeDefs,
   resolvers: {
     Query: {
-      users: async (_, __, context) => {
-        const result = await context.db.select().from(users).all();
+      users: async (_, __, { db }) => {
+        return await db.select().from(users).all();
+      },
+      user: async (_, { id }, { db }) => {
+        const result = await db.select().from(users).where(eq(users.id, id)).get();
+        if (!result) {
+          throw new GraphQLError(`User with ID ${id} not found`, {
+            extensions: { code: 'NOT_FOUND' },
+          });
+        }
         return result;
       },
-      user: async (_, { id }, context) => {
-        const result = await context.db.select().from(users).where(eq(users.id, id)).all();
-        return result[0];
+      games: async (_, __, { db }) => {
+        return await db.select().from(game).all();
       },
-      games: async (_, __, context) => {
-        const result = await context.db.select().from(game).all()
+      game: async (_, { id }, { db }) => {
+        const result = await db.select().from(game).where(eq(game.id, id)).get();
+        if (!result) {
+          throw new GraphQLError(`Game with ID ${id} not found`, {
+            extensions: { code: 'NOT_FOUND' },
+          });
+        }
         return result;
       },
-      game: async (_, { id }, context) => {
-        const result = await context.db.select().from(game).where(eq(game.id, id)).all();
-        return result[0];
+      reviews: async (_, __, { db }) => {
+        return await db.select().from(review).all();
       },
-      reviews: async (_, __, context) => {
-        const result = await context.db.select().from(review).all();
+      review: async (_, { id }, { db }) => {
+        const result = await db.select().from(review).where(eq(review.id, id)).get();
+        if (!result) {
+          throw new GraphQLError(`Review with ID ${id} not found`, {
+            extensions: { code: 'NOT_FOUND' },
+          });
+        }
         return result;
       },
-      review: async (_, { id }, context) => {
-        const result = await context.db.select().from(review).where(eq(review.id, id)).all();
-        return result[0];
-      }
     },
     Game: {
-      reviews: async (parent, _, context) => {
-        const result = await context.db.select().from(review).where(eq(review.gameId, parent.id)).all();
-        return result;
-      }
+      reviews: async (parent, _, { db }) => {
+        return await db.select().from(review).where(eq(review.gameId, parent.id)).all();
+      },
     },
     User: {
-      reviews: async (parent, _, context) => {
-        const result = await context.db.select().from(review).where(eq(review.userId, parent.id)).all();
-        return result;
-      }
+      reviews: async (parent, _, { db }) => {
+        return await db.select().from(review).where(eq(review.userId, parent.id)).all();
+      },
     },
     Review: {
-      user: async (parent, _, context) => {
-        const result = await context.db.select().from(users).where(eq(users.id, parent.userId)).get();
+      user: async (parent, _, { db }) => {
+        const result = await db.select().from(users).where(eq(users.id, parent.userId)).get();
+        if (!result) {
+          throw new GraphQLError(`User not found for review ${parent.id}`, { extensions: { code: 'NOT_FOUND' } });
+        }
         return result;
       },
-      game: async (parent, _, context) => {
-        const result = await context.db.select().from(game).where(eq(game.id, parent.gameId)).get();
+      game: async (parent, _, { db }) => {
+        const result = await db.select().from(game).where(eq(game.id, parent.gameId)).get();
+        if (!result) {
+          throw new GraphQLError(`Game not found for review ${parent.id}`, { extensions: { code: 'NOT_FOUND' } });
+        }
         return result;
-      }
+      },
     },
     Mutation: {
-      addUser: async (_, { name, email }, context) => {
-        const result = await context.db.insert(users).values({ name, email }).returning();
-        return result[0];
+      addUser: async (_, { name, email }, { db }) => {
+        const existingUser = await db.select().from(users).where(eq(users.email, email)).get();
+        if (existingUser) {
+          throw new GraphQLError(`User with email ${email} already exists`, {
+            extensions: { code: 'CONFLICT' },
+          });
+        }
+        const result = await db.insert(users).values({ name, email }).returning().get();
+        return result;
       },
-      addGame: async (_, { name, description, price, platform }, context) => {
-        const result = await context.db.insert(game).values({ name, description, price, platform }).returning();
-        return result[0];
+      addGame: async (_, { name, description, price, platform }, { db }) => {
+        const existingGame = await db.select().from(game).where(eq(game.name, name)).get();
+        if (existingGame) {
+          throw new GraphQLError(`Game with name ${name} already exists`, {
+            extensions: { code: 'CONFLICT' },
+          });
+        }
+        const result = await db.insert(game).values({ name, description, price, platform }).returning().get();
+        return result;
       },
-      addReview: async (_, { rating, comment, gameId, userId }, context) => {
-        const result = await context.db.insert(review).values({ rating, comment, gameId, userId }).returning();
-        return result[0];
+      addReview: async (_, { rating, comment, gameId, userId }, { db }) => {
+        // Optional: specific check if user/game exists before inserting review, but FK constraints might handle it (if enforced by D1, usually not strict in SQLite without PRAGMA foreign_keys=ON)
+        const result = await db.insert(review).values({ rating, comment, gameId, userId }).returning().get();
+        return result;
       },
-      deleteUser: async (_, { id }, context) => {
-        const deletedReviews = await context.db.delete(review).where(eq(review.userId, id)).returning();
-        const deletedUser = await context.db.delete(users).where(eq(users.id, id)).returning();
-        return deletedUser[0];
-      },
-      deleteReview: async (_, { id }, context) => {
-        const deletedReview = await context.db.delete(review).where(eq(review.id, id)).returning();
-        return deletedReview[0];
-      },
-      deleteGame: async (_, { id }, context) => {
-        const deletedReviews = await context.db.delete(review).where(eq(review.gameId, id)).returning();
-        const deletedGame = await context.db.delete(game).where(eq(game.id, id)).returning();
-        return deletedGame[0];
-      },
-      updateGame: async (_, { id, input }, context) => {
-        const result = await context.db.update(game).set(input).where(eq(game.id, id)).returning();
-        return result[0];
-      },
+      deleteUser: async (_, { id }, { db }) => {
+        // Check existence first to return the object and ensure valid ID
+        const user = await db.select().from(users).where(eq(users.id, id)).get();
+        if (!user) {
+          throw new GraphQLError(`User with ID ${id} not found`, {
+            extensions: { code: 'NOT_FOUND' },
+          });
+        }
 
+        // Cascade delete reviews
+        await db.delete(review).where(eq(review.userId, id));
+        // Delete user
+        await db.delete(users).where(eq(users.id, id));
 
+        return user;
+      },
+      deleteGame: async (_, { id }, { db }) => {
+        const gameToDelete = await db.select().from(game).where(eq(game.id, id)).get();
+        if (!gameToDelete) {
+          throw new GraphQLError(`Game with ID ${id} not found`, {
+            extensions: { code: 'NOT_FOUND' },
+          });
+        }
+
+        // Cascade delete reviews
+        await db.delete(review).where(eq(review.gameId, id));
+        // Delete game
+        await db.delete(game).where(eq(game.id, id));
+
+        return gameToDelete;
+      },
+      deleteReview: async (_, { id }, { db }) => {
+        const reviewToDelete = await db.select().from(review).where(eq(review.id, id)).get();
+        if (!reviewToDelete) {
+          throw new GraphQLError(`Review with ID ${id} not found`, {
+            extensions: { code: 'NOT_FOUND' },
+          });
+        }
+        await db.delete(review).where(eq(review.id, id));
+        return reviewToDelete;
+      },
+      updateGame: async (_, { id, input }, { db }) => {
+        const result = await db.update(game).set(input).where(eq(game.id, id)).returning().get();
+        if (!result) {
+          throw new GraphQLError(`Game with ID ${id} not found`, {
+            extensions: { code: 'NOT_FOUND' },
+          });
+        }
+        return result;
+      },
     },
   },
 });
 
-// Create Yoga instance
+// --- Server Configuration ---
+
 const yoga = createYoga({
   schema,
-  context: (initialContext: Bindings) => {
-    // The second argument passed to yoga.fetch (c.env) is merged into initialContext
-    return {
-      db: drizzle(initialContext.my_db_graphql),
-    };
-  },
+  context: (initialContext: Bindings) => ({
+    db: drizzle(initialContext.my_db_graphql),
+  }),
   graphqlEndpoint: '/graphql',
 });
 
-// Handle GraphQL requests
-app.all('/graphql', (c) => {
-  return yoga.fetch(c.req.raw, c.env);
+// --- Routes & Error Handling ---
+
+app.all('/graphql', (c) => yoga.fetch(c.req.raw, c.env));
+
+app.notFound((c) => {
+  return c.json({ message: 'Not Found', status: 404 }, 404);
+});
+
+app.onError((err, c) => {
+  console.error('Global Error:', err);
+  return c.json({ message: 'Internal Server Error', status: 500 }, 500);
 });
 
 export default app;
